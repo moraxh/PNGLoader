@@ -74,7 +74,7 @@ unsigned char* getMagicNumbers(FILE *fptr) {
   return magicNumbers;
 }
 
-HEADER getHeaderFromChunks(char* data) {
+HEADER getHeaderFromChunks(unsigned char* data) {
   HEADER header;
   int location = 0;
 
@@ -150,7 +150,17 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
     chunks[i].crc = __builtin_bswap32(chunks[i].crc); // Endianess
 
     // Validate crc
-    
+    uint32_t calculatedCRC = calculateCRC(chunks[i].type, chunks[i].data, chunks[i].length);
+
+    printf("calculated: %02X\n", calculatedCRC);
+    printf("printed   : %02X\n", chunks[i].crc);
+    printf("\n");
+
+    if (calculatedCRC !=  chunks[i].crc) {
+      printf("Invalid CRC in chunk %s", chunks[i].type);
+      exit(EXIT_FAILURE);
+    }
+
     if (strcmp(chunks[i].type, "IEND") == 0) {
       break;
     }
@@ -186,4 +196,27 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
   }
 
   return chunks;
+}
+
+uint32_t calculateCRC(char type[5], unsigned char* data, size_t dataLength) {
+  char* string = malloc(dataLength + 5); // +5 para los 4 caracteres del 'type' y el '\0'
+
+  // Copy type
+  for (int i = 0; i < 4; i++) {
+    string[i] = type[i];
+  }
+
+  // Copy data
+  for (size_t i = 0; i < dataLength; i++) {
+    string[i + 4] = data[i];
+  }
+
+	uint32_t crc32 = 0xFFFFFFFFu;
+	
+	for (size_t i = 0; i < dataLength + 4; i++) {
+		const uint32_t lookupIndex = (crc32 ^ string[i]) & 0xff;
+		crc32 = (crc32 >> 8) ^ crc32_tab[lookupIndex];
+	}
+	
+	return ~crc32;
 }
