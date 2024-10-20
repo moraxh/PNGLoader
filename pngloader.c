@@ -1,15 +1,36 @@
 #include "pngloader.h"
 
-typedef struct {
-  uint32_t width;
-  uint32_t height;
-  uint8_t bit_depth;
-  uint8_t color_type;
-  uint8_t compression_method;
-  uint8_t filter_method;
-  uint8_t interlance_method;
-} PNGHeader;
+char* loadPNGImage(const char* path) {
+  FILE *fptr;
+  PNG png;
 
+  // Open the file
+  fptr = fopen(path, "rb");
+
+  if (fptr == NULL) {
+      printf("Error opening file");
+      exit(EXIT_FAILURE);
+  }
+
+  // Check file size
+  png.fileSize = getFileSize(fptr);
+
+  // Get Magic Numbers
+  png.magicNumbers = getMagicNumbers(fptr);
+
+  // Check if image is PNG
+  if (!isPNG(png.magicNumbers)) {
+      printf("File must be in PNG Format");
+      exit(EXIT_FAILURE);
+  }
+
+  // Get chunks
+  png.chunks = getChunksFromFile(fptr, &png.header);
+
+  fclose(fptr); // Close the file
+
+  return NULL;
+}
 
 int isPNG(const unsigned char* magicNumber) {
     return 
@@ -25,7 +46,14 @@ int isPNG(const unsigned char* magicNumber) {
 
 long getFileSize(FILE *fptr) {
   fseek(fptr, 0, SEEK_END); // Go to the end of the file
-  return ftell(fptr); // Get the cursor position (fileSize)
+  long fileSize = ftell(fptr); // Get the cursor position (fileSize)
+
+  if (fileSize <= 0) {
+    perror("Empty file");
+    exit(EXIT_FAILURE);
+  }
+
+  return fileSize;
 }
 
 unsigned char* getMagicNumbers(FILE *fptr) {
@@ -33,89 +61,129 @@ unsigned char* getMagicNumbers(FILE *fptr) {
 
   unsigned char* magicNumbers = malloc(8);
 
-  if (fread(magicNumbers, 1, 8, fptr) < 8) return NULL;
+  if (magicNumbers == NULL) {
+    printf("Failed to allocate memory for magic numbers");
+    exit(EXIT_FAILURE);
+  }
+
+  if (fread(magicNumbers, 1, 8, fptr) < 8) {
+    printf("Failed to read from magic numbers");
+    exit(EXIT_FAILURE);
+  }
 
   return magicNumbers;
 }
 
-PNGHeader* getPNGHeader(FILE *fptr) {
-  fseek(fptr, 8, SEEK_SET); // 8 bytes offset (8 bytes File Header)
+HEADER getHeaderFromChunks(char* data) {
+  HEADER header;
+  int location = 0;
 
-  // Validate chunk size (13 bytes in IHDR) 
-  uint32_t chunk_size;
-  char chunk_type[5];
+  // Width
+  memcpy(&header.width, data + location, sizeof(header.width));
+  header.width = __builtin_bswap32(header.width); // Endianess
+  location+=sizeof(header.width);
 
-  fread(&chunk_size, sizeof(chunk_size), 1, fptr);
-  fread(chunk_type, sizeof(char), 4, fptr);
+  // Height
+  memcpy(&header.height, data + location, sizeof(header.height));
+  header.height = __builtin_bswap32(header.height); // Endianess
+  location+=sizeof(header.height);
 
-  chunk_size = __builtin_bswap32(chunk_size);
+  // Bit Depth
+  memcpy(&header.bit_depth, data + location, sizeof(header.bit_depth));
+  location+=sizeof(header.bit_depth);
 
-  printf("%u\n", chunk_size);
-  printf("%s\n", chunk_type);
+  // Color Type
+  memcpy(&header.color_type, data + location, sizeof(header.color_type));
+  location+=sizeof(header.color_type);
 
-  if (chunk_size != 13 || strcmp(chunk_type, "IHDR") != 0) return NULL;
+  // Compression Method
+  memcpy(&header.compression_method, data + location, sizeof(header.compression_method));
+  location+=sizeof(header.compression_method);
 
-  PNGHeader *header = malloc(sizeof(PNGHeader));
+  // Filter Method
+  memcpy(&header.filter_method, data + location, sizeof(header.filter_method));
+  location+=sizeof(header.filter_method);
 
-  fread(&header->width, sizeof(header->width), 1, fptr); // Width
-  fread(&header->height, sizeof(header->height), 1, fptr); // Height
-  fread(&header->bit_depth, 1, 1, fptr); // Bit Depth
-  fread(&header->color_type, 1, 1, fptr); // Color Type
-  fread(&header->compression_method, 1, 1, fptr); // Compression Method
-  fread(&header->filter_method, 1, 1, fptr); // Filter Method
-  fread(&header->interlance_method, 1, 1, fptr); // Interlace Method
-
-  // Endianess
-  header->width = __builtin_bswap32(header->width);
-  header->height = __builtin_bswap32(header->height);
+  // Interlance Method
+  memcpy(&header.interlance_method, data + location, sizeof(header.interlance_method));
+  location+=sizeof(header.interlance_method);
 
   return header;
 }
 
-char* loadPNGImage(const char* path) {
-  FILE *fptr;
+CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
+  CHUNK* chunks = malloc(sizeof(CHUNK));
 
-  // Open the file
-  fptr = fopen(path, "rb");
-
-  if (fptr == NULL) {
-      printf("Error opening file");
-      return NULL;
+  if (chunks == NULL) {
+    perror("Failed to allocate memory for chunks array");
+    exit(EXIT_FAILURE);
   }
 
-  // Get the size of the file
-  long fileSize = getFileSize(fptr);
+  fseek(fptr, 8, SEEK_SET); // 8 bytes magic numbers
 
-  if (fileSize == 0) {
-      printf("File is empty");
-      return NULL;
-  }
-
-  unsigned char* magicNumbers = getMagicNumbers(fptr);
-
-  // Extracting the magic numbers
-  if (magicNumbers == NULL) {
-    printf("Error reading the file");
-    return NULL;
-  }
-
-  // Check if image is PNG
-  if (!isPNG(magicNumbers)) {
-      printf("File must be in PNG Format");
-      return NULL;
-  }
+  int i = 0;
   
-  // Get header
-  PNGHeader *header = getPNGHeader(fptr);
+  while (1){
+    // Chunk Length
+    fread(&chunks[i].length, sizeof(chunks[i].length), 1, fptr);
+    chunks[i].length = __builtin_bswap32(chunks[i].length); // Endianess
 
-  if (header == NULL) {
-    printf("Error while reading the image's header");
+    // Chunk Type
+    fread(chunks[i].type, sizeof(chunks[i].type[0]), 4, fptr); // Type
+
+    // Allocate memory for data
+    chunks[i].data = malloc(chunks[i].length); // Allocate memory
+    if (chunks[i].data == NULL) {
+      perror("Failed to allocate memory for chunk data");
+      exit(EXIT_FAILURE);
+    }
+
+    // Chunk Data
+    fread(chunks[i].data, chunks[i].length, 1, fptr); // Data
+
+    if (strcmp(chunks[i].type, "IHDR") == 0) {
+      *header = getHeaderFromChunks(chunks[i].data);
+    }
+
+    // Chunk CRC
+    fread(&chunks[i].crc, sizeof(chunks[i].crc), 1, fptr);
+    chunks[i].crc = __builtin_bswap32(chunks[i].crc); // Endianess
+
+    // Validate crc
+    
+    if (strcmp(chunks[i].type, "IEND") == 0) {
+      break;
+    }
+
+    i+=1;
+
+    // Allocate more memory
+    CHUNK* chunks_aux = malloc(sizeof(CHUNK) * (i + 1));
+    if (chunks_aux == NULL) {
+      perror("Failed to allocate memory for chunks aux array");
+      exit(EXIT_FAILURE);
+    }
+
+    // Copy data
+    for (int j = 0; j < i; j++) {
+      chunks_aux[j] = chunks[j];
+    }
+
+    free(chunks); // Delete previous array
+
+    chunks = malloc(sizeof(CHUNK) * (i + 1)); // Allocate memory
+    if (chunks == NULL) {
+      perror("Failed to allocate memory for chunks array");
+      exit(EXIT_FAILURE);
+    }
+
+    // Copy data again
+    for (int j = 0; j < i; j++) {
+      chunks[j] = chunks_aux[j];
+    }
+
+    free(chunks_aux);
   }
 
-  printf("%d\n", header->width);
-  printf("%d\n", header->height);
-
-  fclose(fptr); // Close the file
-
-  return NULL;
+  return chunks;
 }
