@@ -1,5 +1,7 @@
 #include "pngloader.h"
 
+const uint32_t poly = 0xEDB88320;
+
 char* loadPNGImage(const char* path) {
   FILE *fptr;
   PNG png;
@@ -211,12 +213,19 @@ uint32_t calculateCRC(char type[5], unsigned char* data, size_t dataLength) {
     string[i + 4] = data[i];
   }
 
-	uint32_t crc32 = 0xFFFFFFFFu;
+	uint32_t crc = 0xFFFFFFFF;
+
+  for (int byteindex = 0; byteindex < dataLength + 4; byteindex++) {
+    crc ^= data[byteindex];
+
+    for (int i = 0; i < 8; i++) {
+      // If the msb is 1, xor with poly
+      if (crc & 1)
+        crc = (crc >> 1) ^ poly;
+      else 
+        crc >>= 1;
+    }
+  }
 	
-	for (size_t i = 0; i < dataLength + 4; i++) {
-		const uint32_t lookupIndex = (crc32 ^ string[i]) & 0xff;
-		crc32 = (crc32 >> 8) ^ crc32_tab[lookupIndex];
-	}
-	
-	return ~crc32;
+	return ~crc;
 }
