@@ -1,6 +1,6 @@
 #include "pngloader.h"
 
-const uint32_t poly = 0xEDB88320;
+const uint32_t poly = 0xEDB88320L;
 
 char* loadPNGImage(const char* path) {
   FILE *fptr;
@@ -27,9 +27,9 @@ char* loadPNGImage(const char* path) {
   }
 
   // Get chunks
-  png.chunks = getChunksFromFile(fptr, &png.header);
+  getChunksFromFile(fptr, &png.header);
 
-  fclose(fptr); // Close the file
+  // fclose(fptr); // Close the file
 
   return NULL;
 }
@@ -132,6 +132,7 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
 
     // Chunk Type
     fread(chunks[i].type, sizeof(chunks[i].type[0]), 4, fptr); // Type
+    chunks[i].type[4] = '\0';
 
     // Allocate memory for data
     chunks[i].data = malloc(chunks[i].length); // Allocate memory
@@ -154,8 +155,9 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
     // Validate crc
     uint32_t calculatedCRC = calculateCRC(chunks[i].type, chunks[i].data, chunks[i].length);
 
-    printf("calculated: %02X\n", calculatedCRC);
-    printf("printed   : %02X\n", chunks[i].crc);
+    printf("%s\n", chunks[i].type);
+    printf("stored     : %02X\n", chunks[i].crc);
+    printf("calculated : %02X\n", calculatedCRC);
     printf("\n");
 
     if (calculatedCRC !=  chunks[i].crc) {
@@ -196,12 +198,14 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
 
     free(chunks_aux);
   }
-
   return chunks;
 }
 
 uint32_t calculateCRC(char type[5], unsigned char* data, size_t dataLength) {
-  char* string = malloc(dataLength + 5); // +5 para los 4 caracteres del 'type' y el '\0'
+  // Its VERY important to set this variable in a unsigned char array
+  // because if not the program can have negative values and the negative 
+  // values will show them with two's complement
+  unsigned char* string = malloc(dataLength + 4);
 
   // Copy type
   for (int i = 0; i < 4; i++) {
@@ -213,19 +217,23 @@ uint32_t calculateCRC(char type[5], unsigned char* data, size_t dataLength) {
     string[i + 4] = data[i];
   }
 
-	uint32_t crc = 0xFFFFFFFF;
+	uint32_t crc = 0xFFFFFFFFu;
 
   for (int byteindex = 0; byteindex < dataLength + 4; byteindex++) {
-    crc ^= data[byteindex];
+    crc ^= string[byteindex];
 
     for (int i = 0; i < 8; i++) {
       // If the msb is 1, xor with poly
       if (crc & 1)
-        crc = (crc >> 1) ^ poly;
+        crc = poly ^ (crc >> 1);
       else 
         crc >>= 1;
     }
   }
+
+  // exit(0);
+
+  free(string);
 	
 	return ~crc;
 }
