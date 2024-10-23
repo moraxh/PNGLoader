@@ -155,11 +155,6 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
     // Validate crc
     uint32_t calculatedCRC = calculateCRC(chunks[i].type, chunks[i].data, chunks[i].length);
 
-    printf("%s\n", chunks[i].type);
-    printf("stored     : %02X\n", chunks[i].crc);
-    printf("calculated : %02X\n", calculatedCRC);
-    printf("\n");
-
     if (calculatedCRC !=  chunks[i].crc) {
       printf("Invalid CRC in chunk %s", chunks[i].type);
       exit(EXIT_FAILURE);
