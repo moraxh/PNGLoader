@@ -2,7 +2,7 @@
 
 const uint32_t poly = 0xEDB88320L;
 
-char* loadPNGImage(const char* path) {
+PNG loadPNGImage(const char* path) {
   FILE *fptr;
   PNG png;
 
@@ -27,11 +27,55 @@ char* loadPNGImage(const char* path) {
   }
 
   // Get chunks
-  getChunksFromFile(fptr, &png.header);
+  png.chunks = getChunksFromFile(fptr, &png.header);
 
-  // fclose(fptr); // Close the file
+  fclose(fptr); // Close the file
 
-  return NULL;
+  return png;
+}
+
+void savePNGImage(const char* path, PNG png) {
+  FILE *fptr;
+
+  // Open the file
+  fptr = fopen(path, "wb");
+
+  if (fptr == NULL) {
+      printf("Error opening file");
+      exit(EXIT_FAILURE);
+  }
+
+  // Write magic numbers
+  fwrite(png.magicNumbers, 1, 8, fptr);
+
+  uint32_t length;
+  uint32_t crc;
+
+  // Write chunks
+  int i = 0;
+  while (1) {
+    // Write chunk length
+    length = __builtin_bswap32(png.chunks[i].length); // Endianess
+    fwrite(&length, sizeof(uint32_t), 1, fptr);
+
+    // Write chunk type
+    fwrite(png.chunks[i].type, 1, 4, fptr);
+
+    // Write data
+    fwrite(png.chunks[i].data, png.chunks[i].length, 1, fptr);
+    
+    // Write crc
+    crc = __builtin_bswap32(png.chunks[i].crc); // Endianess
+    fwrite(&crc, sizeof(uint32_t), 1, fptr);
+
+    if (memcmp(png.chunks[i].type, "IEND", 4) == 0) {
+      break;
+    }
+
+    i++;
+  }
+
+  fclose(fptr); // Close the file
 }
 
 int isPNG(const unsigned char* magicNumber) {
@@ -127,12 +171,12 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
   
   while (1){
     // Chunk Length
-    fread(&chunks[i].length, sizeof(chunks[i].length), 1, fptr);
+    fread(&chunks[i].length, sizeof(uint32_t), 1, fptr);
     chunks[i].length = __builtin_bswap32(chunks[i].length); // Endianess
 
     // Chunk Type
-    fread(chunks[i].type, sizeof(chunks[i].type[0]), 4, fptr); // Type
-    chunks[i].type[4] = '\0';
+    chunks[i].type = malloc(4);
+    fread(chunks[i].type, 1, 4, fptr); // Type
 
     // Allocate memory for data
     chunks[i].data = malloc(chunks[i].length); // Allocate memory
@@ -144,12 +188,12 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
     // Chunk Data
     fread(chunks[i].data, chunks[i].length, 1, fptr); // Data
 
-    if (strcmp(chunks[i].type, "IHDR") == 0) {
+    if (memcmp(chunks[i].type, "IHDR", 4) == 0) {
       *header = getHeaderFromChunks(chunks[i].data);
     }
 
     // Chunk CRC
-    fread(&chunks[i].crc, sizeof(chunks[i].crc), 1, fptr);
+    fread(&chunks[i].crc, sizeof(uint32_t), 1, fptr);
     chunks[i].crc = __builtin_bswap32(chunks[i].crc); // Endianess
 
     // Validate crc
@@ -160,7 +204,7 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
       exit(EXIT_FAILURE);
     }
 
-    if (strcmp(chunks[i].type, "IEND") == 0) {
+    if (memcmp(chunks[i].type, "IEND", 4) == 0) {
       break;
     }
 

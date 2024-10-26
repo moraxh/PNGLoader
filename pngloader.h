@@ -16,7 +16,7 @@ typedef struct {
 
 typedef struct {
   uint32_t length;
-  char type[5];
+  unsigned char* type;
   unsigned char* data;
   uint32_t crc;
 } CHUNK;
@@ -34,5 +34,6 @@ long getFileSize(FILE *fptr);
 unsigned char* getMagicNumbers(FILE *fptr);
 HEADER getHeaderFromChunks(unsigned char* data);
 CHUNK* getChunksFromFile(FILE *fptr, HEADER* header);
-char* loadPNGImage(const char* path);
+PNG loadPNGImage(const char* path);
+void savePNGImage(const char* path, PNG png);
 uint32_t calculateCRC(char type[5], unsigned char* data, size_t dataLength);
