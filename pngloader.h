@@ -36,4 +36,4 @@ HEADER getHeaderFromChunks(unsigned char* data);
 CHUNK* getChunksFromFile(FILE *fptr, HEADER* header);
 PNG loadPNGImage(const char* path);
 void savePNGImage(const char* path, PNG png);
-uint32_t calculateCRC(char type[5], unsigned char* data, size_t dataLength);
+uint32_t calculateCRC(char* type, unsigned char* data, size_t dataLength);

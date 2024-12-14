@@ -240,7 +240,7 @@ CHUNK* getChunksFromFile(FILE *fptr, HEADER* header) {
   return chunks;
 }
 
-uint32_t calculateCRC(char type[5], unsigned char* data, size_t dataLength) {
+uint32_t calculateCRC(char* type, unsigned char* data, size_t dataLength) {
   // Its VERY important to set this variable in a unsigned char array
   // because if not the program can have negative values and the negative 
   // values will show them with two's complement
@@ -269,8 +269,6 @@ uint32_t calculateCRC(char type[5], unsigned char* data, size_t dataLength) {
         crc >>= 1;
     }
   }
-
-  // exit(0);
 
   free(string);
 	
